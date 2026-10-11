@@ -20,6 +20,19 @@ question per lead: **enrich and contact first, review, or skip**, with the reaso
 On the bundled sample, 30 rows become 25 unique leads: 10 to contact first, 8 to review and
 7 to skip. Those 7 are credits and calls not wasted.
 
+## How it fits SaaSquatch
+
+I checked the column names against the live SaaSquatch app:
+
+| In SaaSquatch | Columns | In Lead Triage |
+|---|---|---|
+| Leads table | Company, Website, Industry, Year Founded, City, State, Company LinkedIn | All read on upload except Year Founded |
+| Import Leads dialog | Company, Industry (required); City, State, Business Phone, Website; Street, BBB Rating | The export's first six columns, in these names |
+
+So the loop is: scrape in SaaSquatch, triage here, import only the tier A leads back and
+spend credits on those. I matched the formats from the app's screens. I could not test a
+real exported file, because search and export are not available on the free plan.
+
 ## What it does
 
 1. **Clean.** Reads any CSV with a company, website or email column. Column names are
@@ -45,7 +58,8 @@ On the bundled sample, 30 rows become 25 unique leads: 10 to contact first, 8 to
 5. **Act.** For tier A leads, one click asks Gemini for a one-line "why this lead" note
    and a suggested opening line, grounded in what the company's own website says.
 6. **Export.** The filtered list downloads as a CSV with the score, tier, reasons and any
-   AI notes attached, ready for a CRM or for SaaSquatch.
+   AI notes attached. Its first six columns use the exact names SaaSquatch's Import Leads
+   dialog asks for, so tier A leads can go straight back in for enrichment.
 
 ### Design decisions
 
@@ -83,7 +97,7 @@ Nothing else is required. Two optional settings go in `.env.local` (copy `.env.e
 Other commands:
 
 ```bash
-npm test                  # 59 unit tests (Node's built-in test runner)
+npm test                  # 61 unit tests (Node's built-in test runner)
 node scripts/triage.js    # run the whole pipeline in the terminal
 npm run lint
 npm run build
@@ -216,7 +230,7 @@ are never stored.** They exist in memory for the length of one request.
 I built this with Claude Code as a pair programmer, which is how I build ERP screens in my
 current job. I chose the feature, the scoring rules and the trade-offs, and reviewed and
 ran every part. As a QA engineer my rule for AI-written code is the same as for any other
-code: it is not done until tests prove it, which is why the pipeline has 59 of them.
+code: it is not done until tests prove it, which is why the pipeline has 61 of them.
 
 ## Author
 
