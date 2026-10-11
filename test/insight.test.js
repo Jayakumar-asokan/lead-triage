@@ -65,6 +65,24 @@ test("generateInsights sends the key in a header and returns parsed notes", asyn
   assert.equal(seen.url.includes("test-key"), false);
 });
 
+test("generateInsights falls back to the lighter model when the main one is overloaded", async () => {
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    return urls.length === 1 ? new Response("{}", { status: 503 }) : geminiReply([{ id: 3, why: "Fits.", opener: "Hello." }]);
+  };
+  const original = console.error;
+  console.error = () => {};
+  try {
+    const notes = await generateInsights([lead], DEFAULT_PROFILE, { fetchImpl, apiKey: "test-key" });
+    assert.equal(notes.length, 1);
+    assert.equal(urls.length, 2);
+    assert.match(urls[1], /flash-lite/);
+  } finally {
+    console.error = original;
+  }
+});
+
 test("generateInsights never sends more than the batch limit", async () => {
   let count;
   const fetchImpl = async (_url, init) => {
