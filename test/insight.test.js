@@ -76,8 +76,16 @@ test("generateInsights never sends more than the batch limit", async () => {
   assert.equal(count, MAX_INSIGHT_LEADS);
 });
 
-test("generateInsights reports a missing key and a used-up quota clearly", async () => {
+test("generateInsights reports a missing key, a rejected key and a used-up quota clearly", async () => {
   await assert.rejects(generateInsights([lead], DEFAULT_PROFILE, { apiKey: "" }), { status: 503 });
-  const busy = async () => new Response("{}", { status: 429 });
-  await assert.rejects(generateInsights([lead], DEFAULT_PROFILE, { fetchImpl: busy, apiKey: "test-key" }), { status: 429, message: /quota/ });
+  const original = console.error;
+  console.error = () => {};
+  try {
+    const busy = async () => new Response("{}", { status: 429 });
+    await assert.rejects(generateInsights([lead], DEFAULT_PROFILE, { fetchImpl: busy, apiKey: "test-key" }), { status: 429, message: /quota/ });
+    const rejected = async () => new Response(JSON.stringify({ error: { message: "API key not valid." } }), { status: 400 });
+    await assert.rejects(generateInsights([lead], DEFAULT_PROFILE, { fetchImpl: rejected, apiKey: "bad-key" }), { status: 502, message: /key on this server was rejected/ });
+  } finally {
+    console.error = original;
+  }
 });
