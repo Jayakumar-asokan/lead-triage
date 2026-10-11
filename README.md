@@ -1,36 +1,195 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Lead Triage
 
-## Getting Started
+Know which leads are worth an enrichment credit and a call before you spend either.
 
-First, run the development server:
+**Live demo:** https://lead-triage-893m.vercel.app (click **Try the sample data**)
+
+Built for the Caprae Capital Full Stack Developer pre-work challenge, as an add-on to
+[SaaSquatch Leads](https://www.saasquatchleads.com/).
+
+## The problem it solves
+
+SaaSquatch charges one credit to enrich a lead and advises users to "only enrich the leads
+you want". It does not help them decide which ones those are. A searcher looking for a
+business to acquire can scrape 500 companies in a morning, but many of them are duplicates,
+have a dead website or an email that will bounce, or are simply the wrong size to buy.
+
+Lead Triage sits between scraping and enrichment. Upload a lead export and it answers one
+question per lead: **enrich and contact first, review, or skip**, with the reasons shown.
+
+On the bundled sample, 30 rows become 25 unique leads: 10 to contact first, 8 to review and
+7 to skip. Those 7 are credits and calls not wasted.
+
+## What it does
+
+1. **Clean.** Reads any CSV with a company, website or email column. Column names are
+   matched flexibly ("Company Name", "URL", "Work Email"). Duplicate rows are merged by
+   website domain, then by company name, and the fullest data from each row is kept.
+2. **Verify.** For every lead it checks that the email is well formed and its domain has a
+   mail server, and that the website responds. While visiting the homepage it reads the
+   page title and description, which gives a free "what this company does" line.
+3. **Rank.** Each lead gets a score out of 100 against a target profile the user can edit:
+
+   | Group | Points | Rules |
+   |---|---|---|
+   | Fit | 60 | Revenue 25, company size 15, industry 20 |
+   | Reachability | 30 | Email 15, website 10, phone 5 |
+   | Contact | 10 | Is the named person an owner, founder or CEO? |
+
+   70 and above is tier A (contact first), 45 to 69 is tier B (review), below 45 is tier C
+   (skip). A lead with no working email, website or phone is skipped whatever its fit.
+4. **Explain.** Click a lead to see every rule, its points and a plain reason. Unknown
+   values are listed, so the user knows exactly what an enrichment credit would settle.
+5. **Export.** The filtered list downloads as a CSV with the score, tier and reasons
+   attached, ready for a CRM or for SaaSquatch.
+
+### Design decisions
+
+- **Visible rules instead of an AI score.** A salesperson has to trust the ranking and be
+  able to change it. Every point comes from a rule they can read, and every rule has a test.
+- **Unknown is not zero.** A lead with unknown revenue gets a small neutral score and a
+  flag. It is not thrown away for missing data.
+- **Scoring runs in the browser.** Changing the target profile re-ranks the list instantly,
+  with no server call.
+- **One screen.** Upload, summary, profile, table and detail are all on one page, so there
+  is nothing to learn.
+
+## Run it locally
+
+Requires Node.js 20 or newer.
 
 ```bash
+git clone https://github.com/Jayakumar-asokan/lead-triage.git
+cd lead-triage
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 and click **Try the sample data**.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+No database is needed locally: without `DATABASE_URL` the cache lives in memory. To use
+Postgres, copy `.env.example` to `.env.local` and set `DATABASE_URL` to a Neon connection
+string. The table is created on first use.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Other commands:
 
-## Learn More
+```bash
+npm test                  # 44 unit tests (Node's built-in test runner)
+node scripts/triage.js    # run the whole pipeline in the terminal
+npm run lint
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Dataset
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`public/sample-leads.csv` has 30 rows. It was written by hand for this demo; it is not
+scraped and contains no personal data.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- The software companies are real, so the live website and mail-server checks have
+  something to verify. Their email addresses are public shared inboxes such as `support@`.
+- **The revenue and headcount figures are illustrative placeholders, not real data.**
+- Northwind, Contoso, Fabrikam and Adventure Works are fictional. They carry the planted
+  problems: duplicate rows, a malformed email, dead domains and a phone-only lead.
 
-## Deploy on Vercel
+## Architecture
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+Browser (React)                      Vercel serverless function            Outside
+---------------                      --------------------------            -------
+upload CSV  ── POST /api/triage ──▶  clean + de-duplicate
+                                     read cache  ───────────────────────▶  Neon Postgres
+                                     verify uncached domains  ──────────▶  DNS (MX), company websites
+                                     write cache ───────────────────────▶  Neon Postgres
+score + rank  ◀── leads + checks ──  respond
+filter, explain, export
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 16 (App Router), React 19, plain JavaScript |
+| Styling | Tailwind CSS 4 |
+| CSV parsing and export | Papa Parse |
+| Database | Neon serverless Postgres, through `@neondatabase/serverless` (SQL over HTTPS) |
+| Hosting | Vercel. The page is prerendered static HTML; `/api/triage` is one Node.js serverless function |
+| Deployment | Push to `main` on GitHub; Vercel builds and deploys automatically |
+| Tests | `node --test`, no extra test framework |
+
+### Code layout
+
+| File | Responsibility |
+|---|---|
+| `lib/clean.js` | Parse CSV, map headers, normalise domains and names, merge duplicates |
+| `lib/validate.js` | Email format and MX check, website check, homepage title and description |
+| `lib/score.js` | The scoring rules, tiers and ranking |
+| `lib/cache.js` | Postgres and in-memory cache behind one interface |
+| `lib/export.js` | Ranked leads back to CSV |
+| `app/api/triage/route.js` | The single API endpoint |
+| `components/` | The screen: upload, profile panel, table, detail panel |
+
+The four `lib` pipeline files have no dependency on Next.js, which is why they can be unit
+tested and run from the command line.
+
+### Data storage
+
+One table, created automatically:
+
+```sql
+CREATE TABLE check_cache (
+  key        text PRIMARY KEY,          -- "web:acme.com" or "mx:acme.com"
+  result     jsonb NOT NULL,            -- the check result
+  checked_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+Only public facts about a domain are stored: whether the site is live, its title and
+description, and whether it accepts mail. **Uploaded lead lists, names and email addresses
+are never stored.** They exist in memory for the length of one request.
+
+### Caching and performance
+
+- Results are reused for 7 days. On the live site the sample takes about 1.8 seconds cold
+  (45 domain checks) and about 0.5 seconds when repeated (0 checks).
+- The cache costs one read and one write per upload, however many leads the file has.
+- Each domain is checked once per upload even if several leads share it, and 8 leads are
+  verified at a time.
+- Timeouts and DNS failures are not cached, so they are retried on the next upload.
+- If the database is unavailable the upload still succeeds; it just runs every check live.
+- Website fetches time out after 8 seconds and read at most 200 KB of HTML.
+
+### Safety and data ethics
+
+- **No requests to private networks.** The server fetches addresses that come from an
+  uploaded file, so it refuses any host that resolves to localhost or an internal range,
+  and re-checks after every redirect (SSRF protection).
+- **Light footprint.** One request to each company's homepage, with a user agent that
+  identifies the tool. No login pages, no contact scraping, no CAPTCHA bypass. A site that
+  blocks bots is reported as "blocks bots" and still counted as existing.
+- **Limits.** 1 MB and 500 unique leads per upload, with a clear message when exceeded.
+
+## Known limits
+
+- A mail server on the domain does not prove that a specific mailbox exists.
+- Revenue and headcount come from the uploaded file; the tool does not estimate them.
+- The scoring weights are my judgement of what matters to an acquirer, not a trained model.
+- The API endpoint has no login or rate limit, which a production version would need.
+- `robots.txt` is not consulted before the single homepage request.
+
+## What I would build next
+
+- Read leads straight from the SaaSquatch API and write the tier back, so skipped leads
+  are never enriched by mistake.
+- Saved target profiles per user or per search thesis.
+- An optional LLM step that drafts a first outreach line for tier A leads from the
+  company's own description.
+- Mailbox-level verification for tier A leads only, where the extra cost is justified.
+
+## How it was built
+
+I built this with Claude Code as a pair programmer, which is how I build ERP screens in my
+current job. I chose the feature, the scoring rules and the trade-offs, and reviewed and
+ran every part. As a QA engineer my rule for AI-written code is the same as for any other
+code: it is not done until tests prove it, which is why the pipeline has 44 of them.
+
+## Author
+
+Jayakumar A · [LinkedIn](https://www.linkedin.com/in/jayakumar-qa) · [GitHub](https://github.com/Jayakumar-asokan)
