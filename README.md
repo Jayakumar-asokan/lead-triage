@@ -27,7 +27,9 @@ On the bundled sample, 30 rows become 25 unique leads: 10 to contact first, 8 to
    website domain, then by company name, and the fullest data from each row is kept.
 2. **Verify.** For every lead it checks that the email is well formed and its domain has a
    mail server, and that the website responds. While visiting the homepage it reads the
-   page title and description, which gives a free "what this company does" line.
+   page title and description, which gives a free "what this company does" line. It also
+   picks up the company's published phone number and LinkedIn page, looking at the contact
+   page if the homepage has no phone, and uses them to fill gaps in the uploaded row.
 3. **Rank.** Each lead gets a score out of 100 against a target profile the user can edit:
 
    | Group | Points | Rules |
@@ -40,13 +42,17 @@ On the bundled sample, 30 rows become 25 unique leads: 10 to contact first, 8 to
    (skip). A lead with no working email, website or phone is skipped whatever its fit.
 4. **Explain.** Click a lead to see every rule, its points and a plain reason. Unknown
    values are listed, so the user knows exactly what an enrichment credit would settle.
-5. **Export.** The filtered list downloads as a CSV with the score, tier and reasons
-   attached, ready for a CRM or for SaaSquatch.
+5. **Act.** For tier A leads, one click asks Gemini for a one-line "why this lead" note
+   and a suggested opening line, grounded in what the company's own website says.
+6. **Export.** The filtered list downloads as a CSV with the score, tier, reasons and any
+   AI notes attached, ready for a CRM or for SaaSquatch.
 
 ### Design decisions
 
-- **Visible rules instead of an AI score.** A salesperson has to trust the ranking and be
-  able to change it. Every point comes from a rule they can read, and every rule has a test.
+- **Visible rules for the score, AI for the wording.** A salesperson has to trust the
+  ranking and be able to change it, so every point comes from a rule they can read and
+  every rule has a test. AI is used where it is strong and a mistake is cheap: drafting a
+  note the user reads before sending. Removing the AI key changes nothing about the ranking.
 - **Unknown is not zero.** A lead with unknown revenue gets a small neutral score and a
   flag. It is not thrown away for missing data.
 - **Scoring runs in the browser.** Changing the target profile re-ranks the list instantly,
@@ -67,14 +73,17 @@ npm run dev
 
 Open http://localhost:3000 and click **Try the sample data**.
 
-No database is needed locally: without `DATABASE_URL` the cache lives in memory. To use
-Postgres, copy `.env.example` to `.env.local` and set `DATABASE_URL` to a Neon connection
-string. The table is created on first use.
+Nothing else is required. Two optional settings go in `.env.local` (copy `.env.example`):
+
+| Variable | Without it | With it |
+|---|---|---|
+| `DATABASE_URL` | Domain checks are cached in memory | Cached in Neon Postgres; the table is created on first use |
+| `GEMINI_API_KEY` | The AI notes button is hidden | Tier A leads can get AI notes (free key from Google AI Studio) |
 
 Other commands:
 
 ```bash
-npm test                  # 44 unit tests (Node's built-in test runner)
+npm test                  # 57 unit tests (Node's built-in test runner)
 node scripts/triage.js    # run the whole pipeline in the terminal
 npm run lint
 npm run build
@@ -102,6 +111,7 @@ upload CSV  ── POST /api/triage ──▶  clean + de-duplicate
                                      write cache ───────────────────────▶  Neon Postgres
 score + rank  ◀── leads + checks ──  respond
 filter, explain, export
+tier A leads ── POST /api/insights ▶ strip contact details, ask for notes ▶  Google Gemini API
 ```
 
 | Layer | Choice |
@@ -110,7 +120,8 @@ filter, explain, export
 | Styling | Tailwind CSS 4 |
 | CSV parsing and export | Papa Parse |
 | Database | Neon serverless Postgres, through `@neondatabase/serverless` (SQL over HTTPS) |
-| Hosting | Vercel. The page is prerendered static HTML; `/api/triage` is one Node.js serverless function |
+| AI | Google Gemini (`gemini-flash-latest`) over its REST API, with a JSON response schema |
+| Hosting | Vercel. The page is prerendered static HTML; `/api/triage` and `/api/insights` are Node.js serverless functions |
 | Deployment | Push to `main` on GitHub; Vercel builds and deploys automatically |
 | Tests | `node --test`, no extra test framework |
 
@@ -122,11 +133,13 @@ filter, explain, export
 | `lib/validate.js` | Email format and MX check, website check, homepage title and description |
 | `lib/score.js` | The scoring rules, tiers and ranking |
 | `lib/cache.js` | Postgres and in-memory cache behind one interface |
+| `lib/insight.js` | Builds the AI request without contact details, validates the reply |
 | `lib/export.js` | Ranked leads back to CSV |
-| `app/api/triage/route.js` | The single API endpoint |
+| `app/api/triage/route.js` | Upload endpoint: clean, verify, cache |
+| `app/api/insights/route.js` | AI notes endpoint |
 | `components/` | The screen: upload, profile panel, table, detail panel |
 
-The four `lib` pipeline files have no dependency on Next.js, which is why they can be unit
+The `lib` files have no dependency on Next.js, which is why they can be unit
 tested and run from the command line.
 
 ### Data storage
@@ -154,6 +167,9 @@ are never stored.** They exist in memory for the length of one request.
   verified at a time.
 - Timeouts and DNS failures are not cached, so they are retried on the next upload.
 - If the database is unavailable the upload still succeeds; it just runs every check live.
+- Checking stops starting new leads after 40 seconds, well inside the 60 second function
+  limit. Leads it did not reach are returned marked "unchecked" and still scored, so a slow
+  list degrades instead of failing. Uploading again finishes them from the cache.
 - Website fetches time out after 8 seconds and read at most 200 KB of HTML.
 
 ### Safety and data ethics
@@ -161,9 +177,17 @@ are never stored.** They exist in memory for the length of one request.
 - **No requests to private networks.** The server fetches addresses that come from an
   uploaded file, so it refuses any host that resolves to localhost or an internal range,
   and re-checks after every redirect (SSRF protection).
-- **Light footprint.** One request to each company's homepage, with a user agent that
-  identifies the tool. No login pages, no contact scraping, no CAPTCHA bypass. A site that
-  blocks bots is reported as "blocks bots" and still counted as existing.
+- **Light footprint.** At most two requests per company (homepage, then contact page),
+  with a user agent that identifies the tool. No login pages, no CAPTCHA bypass. A site
+  that blocks bots is reported as "blocks bots" and still counted as existing.
+- **Company data only.** From websites it takes the phone number the company publishes as
+  a call link and its LinkedIn company page. It does not collect staff names, personal
+  profiles or email addresses.
+- **AI sees less than the user does.** Only the company name, what its website says, size
+  and score go to Gemini. Contact names, emails and phone numbers are stripped first, and a
+  test proves it. Website text is treated as data, not instructions, and the reply is
+  validated and length-capped before it is shown. AI notes are labelled "check before
+  sending".
 - **Limits.** 1 MB and 500 unique leads per upload, with a clear message when exceeded.
 
 ## Known limits
@@ -172,15 +196,19 @@ are never stored.** They exist in memory for the length of one request.
 - Revenue and headcount come from the uploaded file; the tool does not estimate them.
 - The scoring weights are my judgement of what matters to an acquirer, not a trained model.
 - The API endpoint has no login or rate limit, which a production version would need.
-- `robots.txt` is not consulted before the single homepage request.
+- `robots.txt` is not consulted before the homepage and contact page requests.
+- Phone numbers are only found when a site publishes them as a call link; many software
+  companies do not, so this helps most with local service businesses.
+- AI notes are drafts. They can be bland or wrong and must be read before use. On Gemini's
+  free tier, Google may use submitted text to improve its products.
+- The largest file tested end to end is the 30-row sample. Bigger files are covered by
+  unit tests of the time budget, not by a live run.
 
 ## What I would build next
 
 - Read leads straight from the SaaSquatch API and write the tier back, so skipped leads
   are never enriched by mistake.
 - Saved target profiles per user or per search thesis.
-- An optional LLM step that drafts a first outreach line for tier A leads from the
-  company's own description.
 - Mailbox-level verification for tier A leads only, where the extra cost is justified.
 
 ## How it was built
@@ -188,7 +216,7 @@ are never stored.** They exist in memory for the length of one request.
 I built this with Claude Code as a pair programmer, which is how I build ERP screens in my
 current job. I chose the feature, the scoring rules and the trade-offs, and reviewed and
 ran every part. As a QA engineer my rule for AI-written code is the same as for any other
-code: it is not done until tests prove it, which is why the pipeline has 44 of them.
+code: it is not done until tests prove it, which is why the pipeline has 57 of them.
 
 ## Author
 

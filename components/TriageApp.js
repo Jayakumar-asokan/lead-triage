@@ -26,6 +26,8 @@ const TIERS = [
   { key: "C", label: "C · Skip" },
 ];
 
+const AI_BATCH = 20; // matches MAX_INSIGHT_LEADS on the server
+
 const toNumber = (text, fallback) => (text.trim() === "" || Number.isNaN(Number(text)) ? fallback : Number(text));
 const toKeywords = (text) => text.split(",").map((k) => k.trim()).filter(Boolean);
 
@@ -68,9 +70,14 @@ export default function TriageApp() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [notes, setNotes] = useState({}); // AI notes by lead id
+  const [aiStatus, setAiStatus] = useState({ state: "idle", message: "" });
   const fileInput = useRef(null);
 
-  const ranked = useMemo(() => rankLeads(checked, formToProfile(form)), [checked, form]);
+  const profile = useMemo(() => formToProfile(form), [form]);
+  const ranked = useMemo(() => rankLeads(checked, profile).map((lead) => ({ ...lead, note: notes[lead.id] ?? null })), [checked, profile, notes]);
+  const needNotes = ranked.filter((lead) => lead.tier === "A" && !lead.note).slice(0, AI_BATCH);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return ranked.filter((lead) => (tier === "all" || lead.tier === tier) && (!q || [lead.company, lead.domain, lead.industry, lead.location].join(" ").toLowerCase().includes(q)));
@@ -89,12 +96,28 @@ export default function TriageApp() {
       if (!response.ok) throw new Error(data.error ?? "Something went wrong.");
       setChecked(data.leads);
       setStats(data.stats);
+      setAiEnabled(Boolean(data.aiEnabled));
+      setNotes({});
+      setAiStatus({ state: "idle", message: "" });
       setTier("all");
       setQuery("");
       setStatus("done");
     } catch (err) {
       setError(err.message || "Could not reach the server.");
       setStatus("error");
+    }
+  }
+
+  async function writeNotes() {
+    setAiStatus({ state: "loading", message: "" });
+    try {
+      const response = await fetch("/api/insights", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ leads: needNotes, profile }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Something went wrong.");
+      setNotes((current) => ({ ...current, ...Object.fromEntries(data.notes.map((note) => [note.id, note])) }));
+      setAiStatus({ state: "idle", message: data.notes.length ? "" : "The AI returned no usable notes. Try again." });
+    } catch (err) {
+      setAiStatus({ state: "idle", message: err.message || "Could not reach the server." });
     }
   }
 
@@ -147,7 +170,7 @@ export default function TriageApp() {
           ) : (
             <>
               <h2 className="text-lg font-semibold text-slate-900">Drop a lead export here</h2>
-              <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">Any CSV with a company, website or email column works, including a SaaSquatch export. Up to 500 leads.</p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">Any CSV with a company, website or email column works. Up to 500 leads.</p>
               <div className="mt-5 flex flex-wrap justify-center gap-3">
                 <button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
                   Choose a CSV file
@@ -178,6 +201,7 @@ export default function TriageApp() {
           </section>
           <p className="mt-2 text-xs text-slate-500">
             {stats.cache.lookedUp} domain {stats.cache.lookedUp === 1 ? "check" : "checks"} run live, {stats.cache.reused} reused from the last 7 days.
+            {stats.unchecked > 0 && ` ${stats.unchecked} leads were not verified because the file ran out of time; upload it again to finish them.`}
             {stats.unmappedHeaders.length > 0 && ` Columns not used: ${stats.unmappedHeaders.join(", ")}.`}
           </p>
 
@@ -211,6 +235,17 @@ export default function TriageApp() {
                   aria-label="Search leads"
                   className="min-w-[200px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 />
+                {aiEnabled && (
+                  <button
+                    type="button"
+                    disabled={!needNotes.length || aiStatus.state === "loading"}
+                    onClick={writeNotes}
+                    title="Sends company name and website description only. No contact details."
+                    className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                  >
+                    {aiStatus.state === "loading" ? "Writing notes…" : needNotes.length ? `AI notes for ${needNotes.length} tier A leads` : "AI notes ready"}
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={!visible.length}
@@ -220,6 +255,7 @@ export default function TriageApp() {
                   Export {visible.length} to CSV
                 </button>
               </div>
+              {aiStatus.message && <p role="alert" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{aiStatus.message}</p>}
               <LeadTable leads={visible} selectedId={selectedId} onSelect={setSelectedId} />
             </div>
           </div>

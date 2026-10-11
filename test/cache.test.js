@@ -24,7 +24,7 @@ const leads = [
 ];
 
 test("cache keys are domains only, never a person's address", () => {
-  assert.deepEqual(cacheKeys(leads), ["web:acme.com", "mx:acme.com"]);
+  assert.deepEqual(cacheKeys(leads), ["site:acme.com", "mx:acme.com"]);
   assert.deepEqual(cacheKeys([{ company: "Phone only", email: "", domain: "" }]), []);
 });
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkWebsite, emailKind, extractPageInfo, isPrivateAddress, mapLimit, validateEmail, validateLeads } from "../lib/validate.js";
+import { checkWebsite, emailKind, extractContacts, extractPageInfo, isPrivateAddress, mapLimit, validateEmail, validateLeads } from "../lib/validate.js";
 
 // Fake network: only acme.com exists, has mail, and serves a homepage.
 function fakeDeps(overrides = {}) {
@@ -89,6 +89,74 @@ test("checkWebsite never fetches a private address, directly or through a redire
 
   const viaRedirect = fakeDeps({ fetch: async () => new Response(null, { status: 302, headers: { location: "http://127.0.0.1/admin" } }) });
   assert.deepEqual(await checkWebsite("acme.com", viaRedirect), { status: "skipped_private" });
+});
+
+test("extractContacts finds a tel: phone, the LinkedIn company page and the contact page", () => {
+  const html = `
+    <a href="/about">About</a> <a class="nav" href="/contact-us/">Contact</a> <a href="https://other.com/contact">Partner</a>
+    <a href="tel:+1%20555%20010%200199">Call us</a>
+    <a href="https://www.linkedin.com/company/acme-robotics">LinkedIn</a>`;
+  assert.deepEqual(extractContacts(html, "https://acme.com/"), {
+    phone: "+1 555 010 0199",
+    linkedin: "https://www.linkedin.com/company/acme-robotics",
+    contactUrl: "https://acme.com/contact-us/",
+  });
+});
+
+test("extractContacts ignores short numbers, personal LinkedIn profiles and other sites", () => {
+  const html = '<a href="tel:911">x</a> <a href="https://linkedin.com/in/jane-doe">Jane</a> <a href="https://evil.example/contact">c</a>';
+  assert.deepEqual(extractContacts(html, "https://acme.com/"), { phone: "", linkedin: "", contactUrl: "" });
+});
+
+test("checkWebsite reads the contact page when the homepage has no phone", async () => {
+  const pages = {
+    "https://acme.com/": '<title>Acme</title><a href="/contact">Contact</a>',
+    "https://acme.com/contact": '<a href="tel:555-010-0142">Call</a>',
+  };
+  const deps = fakeDeps({ fetch: async (url) => { deps.calls.fetch++; return new Response(pages[url] ?? "", { status: pages[url] ? 200 : 404 }); } });
+  const result = await checkWebsite("acme.com", deps);
+  assert.equal(result.status, "live");
+  assert.equal(result.phone, "555-010-0142");
+  assert.equal(deps.calls.fetch, 2);
+});
+
+test("a broken contact page does not turn a live site into a dead one", async () => {
+  const deps = fakeDeps({
+    fetch: async (url) => {
+      if (url.endsWith("/contact")) throw new Error("socket hang up");
+      return new Response('<title>Acme</title><a href="/contact">Contact</a>', { status: 200 });
+    },
+  });
+  const result = await checkWebsite("acme.com", deps);
+  assert.equal(result.status, "live");
+  assert.equal(result.phone, undefined);
+});
+
+test("validateLeads fills a missing phone from the website but never overwrites the upload", async () => {
+  const deps = fakeDeps({ fetch: async () => new Response('<a href="tel:555-010-0142">Call</a>', { status: 200 }) });
+  const [blank, given] = await validateLeads(
+    [
+      { company: "Acme", email: "", phone: "", linkedin: "", domain: "acme.com" },
+      { company: "Acme HQ", email: "", phone: "555-9999", linkedin: "", domain: "acme.com" },
+    ],
+    { deps },
+  );
+  assert.equal(blank.phone, "555-010-0142");
+  assert.deepEqual(blank.foundOnSite, ["phone"]);
+  assert.equal(given.phone, "555-9999");
+  assert.deepEqual(given.foundOnSite, []);
+});
+
+test("leads not started before the deadline come back unchecked, not lost", async () => {
+  const deps = fakeDeps();
+  let clock = 0;
+  const leads = [1, 2, 3].map((n) => ({ company: `Co ${n}`, email: `bad-address-${n}`, phone: "", linkedin: "", domain: "acme.com" }));
+  const result = await validateLeads(leads, { deps, concurrency: 1, deadline: 5, now: () => (clock += 4) });
+  assert.equal(result.length, 3);
+  assert.equal(result[0].checks.website.status, "live");
+  assert.equal(result[0].unchecked, undefined);
+  assert.deepEqual(result[2].checks, { email: { status: "invalid_format" }, website: { status: "unknown" } });
+  assert.equal(result[2].unchecked, true);
 });
 
 test("mapLimit keeps order and never exceeds the limit", async () => {

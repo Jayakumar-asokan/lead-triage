@@ -47,6 +47,17 @@ export default function LeadDetail({ lead, onClose }) {
         </p>
       )}
 
+      {lead.note && (
+        <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">AI note · check before sending</div>
+          <p className="mt-1 text-slate-800">{lead.note.why}</p>
+          <p className="mt-2 text-slate-800">
+            <span className="font-medium text-slate-900">Opening line: </span>
+            {lead.note.opener}
+          </p>
+        </div>
+      )}
+
       <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Why this score</h3>
       <ul className="mt-2 space-y-2.5">
         {lead.reasons.map((reason) => (
@@ -75,7 +86,14 @@ export default function LeadDetail({ lead, onClose }) {
         <Fact label="Website">
           <WebsitePill check={lead.checks?.website} />
         </Fact>
-        <Fact label="Phone">{lead.phone}</Fact>
+        <Fact label="Phone">{lead.phone && `${lead.phone}${lead.foundOnSite?.includes("phone") ? " (from their website)" : ""}`}</Fact>
+        <Fact label="LinkedIn">
+          {lead.linkedin && (
+            <a href={lead.linkedin} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
+              Company page
+            </a>
+          )}
+        </Fact>
         <Fact label="Location">{lead.location}</Fact>
         <Fact label="Merged rows">{lead.duplicates > 0 ? `${lead.duplicates + 1} rows combined into this lead` : ""}</Fact>
       </dl>

@@ -4,11 +4,13 @@
 
 import { cleanCsv } from "@/lib/clean";
 import { validateWithCache } from "@/lib/cache";
+import { insightsEnabled } from "@/lib/insight";
 
 export const maxDuration = 60;
 
 const MAX_CSV_CHARS = 1_000_000;
 const MAX_LEADS = 500;
+const CHECK_BUDGET_MS = 40_000;
 
 function fail(status, error) {
   return Response.json({ error }, { status });
@@ -29,6 +31,12 @@ export async function POST(request) {
   if (!leads.length) return fail(422, "No leads found. The first row must be a header with a company, website or email column.");
   if (leads.length > MAX_LEADS) return fail(413, `The file has ${leads.length} unique leads; the limit is ${MAX_LEADS} per upload.`);
 
-  const { leads: checked, cache } = await validateWithCache(leads);
-  return Response.json({ leads: checked.map((lead, id) => ({ id, ...lead })), stats: { ...stats, cache } });
+  // Stop starting new checks well before the 60 second limit; late leads return unchecked.
+  const { leads: checked, cache } = await validateWithCache(leads, { deadline: Date.now() + CHECK_BUDGET_MS });
+  const unchecked = checked.filter((lead) => lead.unchecked).length;
+  return Response.json({
+    leads: checked.map((lead, id) => ({ id, ...lead })),
+    stats: { ...stats, cache, unchecked },
+    aiEnabled: insightsEnabled(),
+  });
 }
