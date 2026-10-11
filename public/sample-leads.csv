@@ -1,0 +1,31 @@
+Company Name,Website,Email,Phone,Contact Name,Job Title,Industry,Employees,Revenue Estimate,Location,Notes
+Basecamp,https://basecamp.com,support@basecamp.com,,,,Project management software,51-200,$50M,"Chicago, IL",Bootstrapped
+"Basecamp, LLC",www.basecamp.com/about,,,,,SaaS,,,Chicago,Duplicate row from second export
+Buffer,buffer.com,hello@buffer.com,,,,Social media software,51-200,$20M,Remote,
+Buffer Inc.,https://www.buffer.com/,,,,,,85,,"San Francisco, CA",Duplicate with headcount
+Calendly,https://calendly.com,support@calendly.com,,,,Scheduling software,201-500,$100M,"Atlanta, GA",Too large for a search fund
+Plausible Analytics,plausible.io,hello@plausible.io,,,,Web analytics,11-50,$3M,Estonia,Founder-led
+Fathom Analytics,usefathom.com,support@usefathom.com,,,,Web analytics,2-10,$2.5M,Canada,Founder-led
+Tuple,https://tuple.app,support@tuple.app,,,,Developer tools,11-50,$5M,Remote,
+Transistor,transistor.fm,help@transistor.fm,,,,Podcast hosting,2-10,$2M,Remote,Bootstrapped
+Transistor FM,https://transistor.fm/pricing,,,,,Media software,,,,Duplicate row
+Savvycal,savvycal.com,support@savvycal.com,,,,Scheduling software,2-10,$1M,Remote,
+ConvertKit,https://convertkit.com,help@convertkit.com,,,,Email marketing,51-200,$40M,"Boise, ID",
+Hey Marketers,,jobs@heymarketers.co,,,,Job board,1,,,No website given
+Northwind Traders,northwind-traders-example.invalid,info@northwind-traders-example.invalid,555-0142,,,Wholesale distribution,51-200,$12M,"Seattle, WA",Domain does not exist
+Contoso Field Services,,office@contoso,555-0117,,,HVAC services,11-50,$4M,"Dallas, TX",Malformed email
+Fabrikam Plumbing & Heating Ltd,,,555-0188,,,Plumbing services,11-50,$3.5M,"Phoenix, AZ",Phone only
+Fabrikam Plumbing and Heating,,owner@fabrikam-plumbing-example.invalid,,,Owner,Home services,24,,Phoenix,Duplicate by name
+Ghost,https://ghost.org,support@ghost.org,,,,Publishing software,11-50,$7M,Singapore,Non-profit foundation
+Carrd,carrd.co,,,,,Website builder,2-10,$1.5M,"Nashville, TN",No email
+Senja,senja.io,hello@senja.io,,,,Testimonial software,2-10,$1M,Remote,
+Bannerbear,https://www.bannerbear.com,hello@bannerbear.com,,,,Image generation API,2-10,$1M,Remote,
+Pallyy,pallyy.com,support@pallyy.com,,,,Social media software,2-10,$1M,Australia,
+Outseta,outseta.com,support@outseta.com,,,,Membership software,2-10,$1.2M,Remote,
+Userlist,userlist.com,hello@userlist.com,,,,Email automation,2-10,$700k,Remote,
+Simple Analytics,simpleanalytics.com,support@simpleanalytics.com,,,,Web analytics,2-10,$500k,Netherlands,
+SIMPLE ANALYTICS B.V.,https://simpleanalytics.com/,,,,,Analytics,5,,Amsterdam,Duplicate row
+Adventure Works Cycles,adventure-works-example.invalid,sales@@adventure-works.com,555-0199,,,Bicycle manufacturing,201-500,$60M,"Bothell, WA",Bad email and dead site
+Tailscale,https://tailscale.com,info@tailscale.com,,,,Networking software,201-500,$80M,"Toronto, ON",VC-backed
+Hiring Cafe,hiring.cafe,,,,,Job search,2-10,,Remote,
+Gumroad,gumroad.com,support@gumroad.com,,,,Creator commerce,11-50,$20M,Remote,
