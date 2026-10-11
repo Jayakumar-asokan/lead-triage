@@ -83,7 +83,7 @@ Nothing else is required. Two optional settings go in `.env.local` (copy `.env.e
 Other commands:
 
 ```bash
-npm test                  # 58 unit tests (Node's built-in test runner)
+npm test                  # 59 unit tests (Node's built-in test runner)
 node scripts/triage.js    # run the whole pipeline in the terminal
 npm run lint
 npm run build
@@ -216,7 +216,7 @@ are never stored.** They exist in memory for the length of one request.
 I built this with Claude Code as a pair programmer, which is how I build ERP screens in my
 current job. I chose the feature, the scoring rules and the trade-offs, and reviewed and
 ran every part. As a QA engineer my rule for AI-written code is the same as for any other
-code: it is not done until tests prove it, which is why the pipeline has 58 of them.
+code: it is not done until tests prove it, which is why the pipeline has 59 of them.
 
 ## Author
 

@@ -83,6 +83,23 @@ test("generateInsights falls back to the lighter model when the main one is over
   }
 });
 
+test("generateInsights also falls back when the main model does not answer in time", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    if (++calls === 1) throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
+    return geminiReply([{ id: 3, why: "Fits.", opener: "Hello." }]);
+  };
+  const original = console.error;
+  console.error = () => {};
+  try {
+    assert.equal((await generateInsights([lead], DEFAULT_PROFILE, { fetchImpl, apiKey: "test-key" })).length, 1);
+    const neverAnswers = async () => { throw Object.assign(new Error("timed out"), { name: "TimeoutError" }); };
+    await assert.rejects(generateInsights([lead], DEFAULT_PROFILE, { fetchImpl: neverAnswers, apiKey: "test-key" }), { status: 429, message: /busy/ });
+  } finally {
+    console.error = original;
+  }
+});
+
 test("generateInsights never sends more than the batch limit", async () => {
   let count;
   const fetchImpl = async (_url, init) => {
